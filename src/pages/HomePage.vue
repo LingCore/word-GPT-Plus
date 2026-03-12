@@ -1,12 +1,12 @@
 <template>
   <CheckPointsPage
     v-if="showCheckpoints"
-    :thread-id="threadId"
-    :saver="saver"
-    :current-checkpoint-id="currentCheckpointId"
+    :thread-id="session.threadId"
+    :saver="session.saver"
+    :current-checkpoint-id="session.currentCheckpointId"
     @close="showCheckpoints = false"
-    @restore="handleRestore"
-    @select-thread="handleSelectThread"
+    @restore="onRestore"
+    @select-thread="onSelectThread"
   />
   <div
     v-show="!showCheckpoints"
@@ -27,7 +27,7 @@
             type="secondary"
             class="border-none p-1!"
             :icon-size="18"
-            @click="startNewChat"
+            @click="onNewChat"
           />
           <CustomButton
             :title="t('settings')"
@@ -36,7 +36,7 @@
             type="secondary"
             class="border-none p-1!"
             :icon-size="18"
-            @click="settings"
+            @click="goToSettings"
           />
           <CustomButton
             :title="t('checkPoints')"
@@ -45,7 +45,7 @@
             type="secondary"
             class="border-none p-1!"
             :icon-size="18"
-            @click="checkPoints"
+            @click="showCheckpoints = true"
           />
         </div>
       </div>
@@ -61,20 +61,20 @@
           type="secondary"
           :icon-size="16"
           class="shrink-0! bg-surface! p-1.5!"
-          :disabled="loading"
+          :disabled="session.loading"
           @click="applyQuickAction(action.key)"
         />
         <SingleSelect
-          v-model="selectedPromptId"
-          :key-list="savedPrompts.map(prompt => prompt.id)"
+          v-model="prompts.selectedPromptId"
+          :key-list="prompts.savedPrompts.map(prompt => prompt.id)"
           :placeholder="t('selectPrompt')"
           title=""
           :fronticon="false"
           class="max-w-xs! flex-1! bg-surface! text-xs!"
-          @change="loadSelectedPrompt"
+          @change="onPromptChange"
         >
           <template #item="{ item }">
-            {{ savedPrompts.find(prompt => prompt.id === item)?.name || item }}
+            {{ prompts.savedPrompts.find(prompt => prompt.id === item)?.name || item }}
           </template>
         </SingleSelect>
       </div>
@@ -85,7 +85,7 @@
         class="flex flex-1 flex-col gap-4 overflow-y-auto rounded-md border border-border-secondary bg-surface p-2 shadow-sm"
       >
         <div
-          v-if="history.length === 0"
+          v-if="session.history.length === 0"
           class="flex h-full flex-col items-center justify-center gap-4 p-8 text-center text-accent"
         >
           <Sparkles :size="32" />
@@ -98,8 +98,8 @@
         </div>
 
         <div
-          v-for="(msg, index) in displayHistory"
-          :key="msg.id || index"
+          v-for="(msg, index) in session.displayHistory"
+          :key="(msg as MessageWithId).id || index"
           class="group flex items-end gap-4 [.user]:flex-row-reverse"
           :class="msg instanceof AIMessage ? 'assistant' : 'user'"
         >
@@ -160,17 +160,17 @@
           <div class="flex shrink-0 gap-1 rounded-sm border border-border bg-surface p-0.5">
             <button
               class="cursor-po flex h-7 w-7 items-center justify-center rounded-md border-none text-secondary hover:bg-accent/30 hover:text-white! [.active]:text-accent"
-              :class="{ active: mode === 'ask' }"
+              :class="{ active: session.mode === 'ask' }"
               title="Ask Mode"
-              @click="mode = 'ask'"
+              @click="session.setMode('ask')"
             >
               <MessageSquare :size="14" />
             </button>
             <button
               class="cursor-po flex h-7 w-7 items-center justify-center rounded-md border-none text-secondary hover:bg-accent/30 hover:text-white! [.active]:text-accent"
-              :class="{ active: mode === 'agent' }"
+              :class="{ active: session.mode === 'agent' }"
               title="Agent Mode"
-              @click="mode = 'agent'"
+              @click="session.setMode('agent')"
             >
               <BotMessageSquare :size="17" />
             </button>
@@ -202,16 +202,16 @@
             ref="inputTextarea"
             v-model="userInput"
             class="placeholder::text-secondary block max-h-30 flex-1 resize-none overflow-y-auto border-none bg-transparent py-2 text-xs leading-normal text-main outline-none placeholder:text-xs"
-            :placeholder="mode === 'ask' ? $t('askAnything') : $t('directTheAgent')"
+            :placeholder="session.mode === 'ask' ? $t('askAnything') : $t('directTheAgent')"
             rows="1"
             @keydown.enter.exact.prevent="sendMessage"
             @input="adjustTextareaHeight"
           />
           <button
-            v-if="loading"
+            v-if="session.loading"
             class="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-sm border-none bg-danger text-white"
             title="Stop"
-            @click="stopGeneration"
+            @click="session.stopGeneration()"
           >
             <Square :size="18" />
           </button>
@@ -241,8 +241,7 @@
 </template>
 
 <script lang="ts" setup>
-import { AIMessage, HumanMessage, Message, SystemMessage } from '@langchain/core/messages'
-import { useStorage } from '@vueuse/core'
+import { AIMessage, HumanMessage, type Message, SystemMessage } from '@langchain/core/messages'
 import {
   BookOpen,
   BotMessageSquare,
@@ -260,165 +259,53 @@ import {
   Sparkles,
   Square,
 } from 'lucide-vue-next'
-import { v4 as uuidv4 } from 'uuid'
 import { computed, nextTick, onBeforeMount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
-import { type CheckpointTuple, IndexedDBSaver } from '@/api/checkpoints'
 import { insertFormattedResult, insertResult } from '@/api/common'
 import { getAgentResponse, getChatResponse } from '@/api/union'
 import CustomButton from '@/components/CustomButton.vue'
 import SingleSelect from '@/components/SingleSelect.vue'
+import { cleanMessageText, renderSegments } from '@/composables'
+import { buildProviderConfig } from '@/composables/useProviderConfig'
 import CheckPointsPage from '@/pages/checkPointsPage.vue'
+import { usePromptStore, useSessionStore, useToolPrefsStore } from '@/stores'
 import { checkAuth } from '@/utils/common'
 import { buildInPrompt, getBuiltInPrompt } from '@/utils/constant'
 import { localStorageKey } from '@/utils/enum'
-import { createGeneralTools, GeneralToolName } from '@/utils/generalTools'
 import { message as messageUtil } from '@/utils/message'
 import useSettingForm from '@/utils/settingForm'
 import { settingPreset } from '@/utils/settingPreset'
-import { createWordTools, WordToolName } from '@/utils/wordTools'
+
+interface MessageWithId extends Message {
+  id?: string
+}
 
 const router = useRouter()
 const { t } = useI18n()
 
+const session = useSessionStore()
+const toolPrefs = useToolPrefsStore()
+const prompts = usePromptStore()
 const settingForm = useSettingForm()
 
-interface SavedPrompt {
-  id: string
-  name: string
-  systemPrompt: string
-  userPrompt: string
-}
-
-const savedPrompts = ref<SavedPrompt[]>([])
-const selectedPromptId = ref<string>('')
-const customSystemPrompt = ref<string>('')
-
-const allWordToolNames: WordToolName[] = [
-  'getSelectedText',
-  'getDocumentContent',
-  'insertText',
-  'replaceSelectedText',
-  'appendText',
-  'insertParagraph',
-  'formatText',
-  'searchAndReplace',
-  'getDocumentProperties',
-  'insertTable',
-  'insertList',
-  'deleteText',
-  'clearFormatting',
-  'setFontName',
-  'insertPageBreak',
-  'getRangeInfo',
-  'selectText',
-  'insertImage',
-  'getTableInfo',
-  'insertBookmark',
-  'goToBookmark',
-  'insertContentControl',
-  'findText',
-]
-
-const allGeneralToolNames: GeneralToolName[] = ['fetchWebContent', 'searchWeb', 'getCurrentDate', 'calculateMath']
-
-// Tool state
-const enabledWordTools = ref<WordToolName[]>(loadEnabledWordTools())
-const enabledGeneralTools = ref<GeneralToolName[]>(loadEnabledGeneralTools())
-
-function loadEnabledWordTools(): WordToolName[] {
-  const stored = localStorage.getItem('enabledWordTools')
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored)
-      return parsed.filter((name: string) => allWordToolNames.includes(name as WordToolName))
-    } catch {
-      return [...allWordToolNames]
-    }
-  }
-  return [...allWordToolNames]
-}
-
-function loadEnabledGeneralTools(): GeneralToolName[] {
-  const stored = localStorage.getItem('enabledGeneralTools')
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored)
-      return parsed.filter((name: string) => allGeneralToolNames.includes(name as GeneralToolName))
-    } catch {
-      return [...allGeneralToolNames]
-    }
-  }
-  return [...allGeneralToolNames]
-}
-
-function getActiveTools() {
-  const wordTools = createWordTools(enabledWordTools.value)
-  const generalTools = createGeneralTools(enabledGeneralTools.value)
-  return [...generalTools, ...wordTools]
-}
-
-function loadSavedPrompts() {
-  const stored = localStorage.getItem('savedPrompts')
-  if (stored) {
-    try {
-      savedPrompts.value = JSON.parse(stored)
-    } catch (error) {
-      console.error('Error loading saved prompts:', error)
-      savedPrompts.value = []
-    }
-  }
-}
-
-function loadSelectedPrompt() {
-  if (!selectedPromptId.value) {
-    customSystemPrompt.value = ''
-    return
-  }
-
-  const prompt = savedPrompts.value.find(p => p.id === selectedPromptId.value)
-  if (prompt) {
-    customSystemPrompt.value = prompt.systemPrompt
-    userInput.value = prompt.userPrompt
-    adjustTextareaHeight()
-
-    if (inputTextarea.value) {
-      inputTextarea.value.focus()
-    }
-  }
-}
-
-// Chat state
-const mode = useStorage(localStorageKey.chatMode, 'ask' as 'ask' | 'agent')
-const history = ref<Message[]>([])
+const showCheckpoints = ref(false)
 const userInput = ref('')
-const loading = ref(false)
 const messagesContainer = ref<HTMLElement>()
 const inputTextarea = ref<HTMLTextAreaElement>()
-const abortController = ref<AbortController | null>(null)
-const threadId = useStorage(localStorageKey.threadId, uuidv4())
-const showCheckpoints = ref(false)
-const saver = new IndexedDBSaver()
-const currentCheckpointId = ref<string>('')
 
-// Settings
-const useWordFormatting = useStorage(localStorageKey.useWordFormatting, true)
-const useSelectedText = useStorage(localStorageKey.useSelectedText, true)
+const useWordFormatting = ref(localStorage.getItem(localStorageKey.useWordFormatting) !== 'false')
+const useSelectedText = ref(localStorage.getItem(localStorageKey.useSelectedText) !== 'false')
 const insertType = ref<insertTypes>('replace')
 
-const errorIssue = ref<boolean | string | null>(false)
+watch(useWordFormatting, v => localStorage.setItem(localStorageKey.useWordFormatting, String(v)))
+watch(useSelectedText, v => localStorage.setItem(localStorageKey.useSelectedText, String(v)))
 
-const displayHistory = computed(() => {
-  return history.value.filter(msg => !(msg instanceof SystemMessage))
-})
-
-// Quick actions
 const quickActions: {
   key: keyof typeof buildInPrompt
   label: string
-  icon: any
+  icon: typeof Globe
 }[] = [
   { key: 'translate', label: t('translate'), icon: Globe },
   { key: 'polish', label: t('polish'), icon: Sparkle },
@@ -426,6 +313,8 @@ const quickActions: {
   { key: 'summary', label: t('summary'), icon: FileCheck },
   { key: 'grammar', label: t('grammar'), icon: CheckCircle },
 ]
+
+// --- Model selection (kept local as it's tightly coupled to UI) ---
 
 const getCustomModels = (key: string, oldKey: string): string[] => {
   const stored = localStorage.getItem(key)
@@ -516,34 +405,31 @@ const currentModelSelect = computed({
   },
 })
 
-function settings() {
-  // FIXME: 使用路由方式会改变当前的threadID,进而重置页面
+// --- Navigation ---
+
+function goToSettings() {
   router.push('/settings')
 }
 
-function checkPoints() {
-  showCheckpoints.value = true
-}
-
-function startNewChat() {
-  if (loading.value) {
-    stopGeneration()
-  }
+function onNewChat() {
+  session.startNewChat()
   userInput.value = ''
-  history.value = []
-  threadId.value = uuidv4()
-  customSystemPrompt.value = ''
-  selectedPromptId.value = ''
+  prompts.clearSelection()
   adjustTextareaHeight()
 }
 
-function stopGeneration() {
-  if (abortController.value) {
-    abortController.value.abort()
-    abortController.value = null
+// --- Prompt handling ---
+
+function onPromptChange() {
+  const result = prompts.selectPrompt(prompts.selectedPromptId)
+  if (result) {
+    userInput.value = result.userPrompt
+    adjustTextareaHeight()
+    inputTextarea.value?.focus()
   }
-  loading.value = false
 }
+
+// --- UI helpers ---
 
 function adjustTextareaHeight() {
   if (inputTextarea.value) {
@@ -559,95 +445,21 @@ async function scrollToBottom() {
   }
 }
 
-async function sendMessage() {
-  if (!userInput.value.trim() || loading.value) return
-  if (!checkApiKey()) return
+// --- Core chat logic ---
 
-  const userMessage = userInput.value.trim()
-  userInput.value = ''
-  adjustTextareaHeight()
-
-  // Get selected text from Word
-  let selectedText = ''
-  if (useSelectedText.value) {
-    selectedText = await Word.run(async ctx => {
-      const range = ctx.document.getSelection()
-      range.load('text')
-      await ctx.sync()
-      return range.text
-    })
+function checkApiKey(): boolean {
+  const auth = {
+    type: settingForm.value.api as supportedPlatforms,
+    apiKey: settingForm.value.officialAPIKey,
+    azureAPIKey: settingForm.value.azureAPIKey,
+    geminiAPIKey: settingForm.value.geminiAPIKey,
+    groqAPIKey: settingForm.value.groqAPIKey,
   }
-
-  // Add user message
-  const fullMessage = new HumanMessage(
-    selectedText ? `${userMessage}\n\n[Selected text: "${selectedText}"]` : userMessage,
-  )
-
-  scrollToBottom()
-
-  loading.value = true
-  abortController.value = new AbortController()
-
-  try {
-    await processChat(fullMessage, undefined)
-  } catch (error: any) {
-    if (error.name === 'AbortError') {
-      messageUtil.info(t('generationStop'))
-    } else {
-      console.error(error)
-      messageUtil.error(t('failedToResponse'))
-      history.value.pop()
-    }
-  } finally {
-    loading.value = false
-    abortController.value = null
+  if (!checkAuth(auth)) {
+    messageUtil.error(t('noAPIKey'))
+    return false
   }
-}
-
-async function applyQuickAction(actionKey: keyof typeof buildInPrompt) {
-  if (!checkApiKey()) return
-
-  // Get selected text
-  const selectedText = await Word.run(async ctx => {
-    const range = ctx.document.getSelection()
-    range.load('text')
-    await ctx.sync()
-    return range.text
-  })
-
-  if (!selectedText) {
-    messageUtil.error(t('selectTextPrompt'))
-    return
-  }
-
-  const builtInPrompts = getBuiltInPrompt()
-  const action = builtInPrompts[actionKey]
-  const settings = settingForm.value
-  const { replyLanguage: lang } = settings
-
-  const systemMessage = action.system(lang)
-  const userMessage = new HumanMessage(action.user(selectedText, lang))
-
-  scrollToBottom()
-
-  loading.value = true
-  abortController.value = new AbortController()
-
-  try {
-    await processChat(userMessage, systemMessage)
-  } catch (error: any) {
-    if (error.name === 'AbortError') {
-      messageUtil.info(t('generationStop'))
-    } else {
-      console.error(error)
-      messageUtil.error(t('failedToProcessAction'))
-      // Remove failed message
-      history.value.pop()
-    }
-  } finally {
-    loading.value = false
-    abortController.value = null
-  }
+  return true
 }
 
 const agentPrompt = (lang: string) =>
@@ -673,143 +485,175 @@ const standardPrompt = (lang: string) =>
   `You are a helpful Microsoft Word specialist. Help users with drafting, brainstorming, and Word-related questions. Reply in ${lang}.`
 
 async function processChat(userMessage: HumanMessage, systemMessage?: string) {
-  const settings = settingForm.value
-  const { replyLanguage: lang, api: provider } = settings
-
-  const isAgentMode = mode.value === 'agent'
+  const { replyLanguage: lang, api: provider } = settingForm.value
+  const isAgentMode = session.mode === 'agent'
 
   const finalSystemMessage =
-    customSystemPrompt.value || systemMessage || (isAgentMode ? agentPrompt(lang) : standardPrompt(lang))
+    prompts.customSystemPrompt || systemMessage || (isAgentMode ? agentPrompt(lang) : standardPrompt(lang))
 
   const defaultSystemMessage = new SystemMessage(finalSystemMessage)
 
-  // Add user message to history
-  history.value.push(userMessage)
+  session.pushMessage(userMessage)
+  const finalMessages = [defaultSystemMessage, ...session.history]
 
-  // Prepare messages for LLM (always include system message first, followed by all history)
-  const finalMessages = [defaultSystemMessage, ...history.value]
-  // Build provider configuration
-  const providerConfigs: Record<string, any> = {
-    official: {
-      provider: 'official',
-      config: {
-        apiKey: settings.officialAPIKey,
-        baseURL: settings.officialBasePath,
-        dangerouslyAllowBrowser: true,
-      },
-      maxTokens: settings.officialMaxTokens,
-      temperature: settings.officialTemperature,
-      model: settings.officialModelSelect,
-    },
-    groq: {
-      provider: 'groq',
-      groqAPIKey: settings.groqAPIKey,
-      groqModel: settings.groqModelSelect,
-      maxTokens: settings.groqMaxTokens,
-      temperature: settings.groqTemperature,
-    },
-    azure: {
-      provider: 'azure',
-      azureAPIKey: settings.azureAPIKey,
-      azureAPIEndpoint: settings.azureAPIEndpoint,
-      azureDeploymentName: settings.azureDeploymentName,
-      azureAPIVersion: settings.azureAPIVersion,
-      maxTokens: settings.azureMaxTokens,
-      temperature: settings.azureTemperature,
-    },
-    gemini: {
-      provider: 'gemini',
-      geminiAPIKey: settings.geminiAPIKey,
-      maxTokens: settings.geminiMaxTokens,
-      temperature: settings.geminiTemperature,
-      geminiModel: settings.geminiModelSelect,
-    },
-    ollama: {
-      provider: 'ollama',
-      ollamaEndpoint: settings.ollamaEndpoint,
-      ollamaModel: settings.ollamaModelSelect,
-      temperature: settings.ollamaTemperature,
-    },
-  }
-
-  const currentConfig = providerConfigs[provider]
+  const currentConfig = buildProviderConfig(settingForm)
   if (!currentConfig) {
     messageUtil.error(t('notSupportedProvider'))
     return
   }
 
-  history.value.push(new AIMessage(''))
+  session.pushMessage(new AIMessage(''))
 
-  // Use agent mode with tools if enabled
   if (isAgentMode) {
-    const tools = getActiveTools()
+    const tools = toolPrefs.getActiveTools()
 
     await getAgentResponse({
-      ...currentConfig,
-      recursionLimit: settings.agentMaxIterations,
+      ...(currentConfig as Record<string, unknown>),
+      recursionLimit: settingForm.value.agentMaxIterations,
       messages: finalMessages,
       tools,
-      errorIssue,
-      loading,
-      abortSignal: abortController.value?.signal,
-      threadId: threadId.value,
-      checkpointId: currentCheckpointId.value,
+      errorIssue: session.errorIssue,
+      loading: session.loading,
+      abortSignal: session.abortController?.signal,
+      threadId: session.threadId,
+      checkpointId: session.currentCheckpointId,
       onStream: (text: string) => {
-        const lastIndex = history.value.length - 1
-        history.value[lastIndex] = new AIMessage(text)
+        session.updateLastMessage(new AIMessage(text))
         scrollToBottom()
       },
-      onToolCall: (toolName: string, _args: any) => {
-        // Show tool call in UI
-        const lastIndex = history.value.length - 1
-        const currentContent = getMessageText(history.value[lastIndex])
-        history.value[lastIndex] = new AIMessage(currentContent + `\n\n🔧 Calling tool: ${toolName}...`)
+      onToolCall: (toolName: string) => {
+        const currentContent = session.getLastMessageText()
+        session.updateLastMessage(new AIMessage(currentContent + `\n\n🔧 Calling tool: ${toolName}...`))
         scrollToBottom()
       },
-      onToolResult: (toolName: string, _result: string) => {
-        // Update with tool result
-        const lastIndex = history.value.length - 1
-        const currentContent = getMessageText(history.value[lastIndex])
+      onToolResult: (toolName: string) => {
+        const currentContent = session.getLastMessageText()
         const updatedContent = currentContent.replace(
           `🔧 Calling tool: ${toolName}...`,
           `✅ Tool ${toolName} completed`,
         )
-        history.value[lastIndex] = new AIMessage(updatedContent)
+        session.updateLastMessage(new AIMessage(updatedContent))
         scrollToBottom()
       },
-    })
+    } as Parameters<typeof getAgentResponse>[0])
   } else {
     await getChatResponse({
-      ...currentConfig,
+      ...(currentConfig as Record<string, unknown>),
       messages: finalMessages,
-      errorIssue,
-      loading,
-      abortSignal: abortController.value?.signal,
-      threadId: threadId.value,
+      errorIssue: session.errorIssue,
+      loading: session.loading,
+      abortSignal: session.abortController?.signal,
+      threadId: session.threadId,
       onStream: (text: string) => {
-        const lastIndex = history.value.length - 1
-        history.value[lastIndex] = new AIMessage(text)
+        session.updateLastMessage(new AIMessage(text))
         scrollToBottom()
       },
-    })
+    } as Parameters<typeof getChatResponse>[0])
   }
 
-  if (errorIssue.value) {
-    if (typeof errorIssue.value === 'string') {
-      messageUtil.error(t(errorIssue.value))
+  if (session.errorIssue) {
+    if (typeof session.errorIssue === 'string') {
+      messageUtil.error(t(session.errorIssue))
     } else {
       messageUtil.error(t('somethingWentWrong'))
     }
-    errorIssue.value = null
+    session.errorIssue = null
     return
   }
 
   scrollToBottom()
 }
 
+async function sendMessage() {
+  if (!userInput.value.trim() || session.loading) return
+  if (!checkApiKey()) return
+
+  const userMessage = userInput.value.trim()
+  userInput.value = ''
+  adjustTextareaHeight()
+
+  let selectedText = ''
+  if (useSelectedText.value) {
+    selectedText = await Word.run(async ctx => {
+      const range = ctx.document.getSelection()
+      range.load('text')
+      await ctx.sync()
+      return range.text
+    })
+  }
+
+  const fullMessage = new HumanMessage(
+    selectedText ? `${userMessage}\n\n[Selected text: "${selectedText}"]` : userMessage,
+  )
+
+  scrollToBottom()
+
+  session.loading = true
+  session.createAbortController()
+
+  try {
+    await processChat(fullMessage, undefined)
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      messageUtil.info(t('generationStop'))
+    } else {
+      console.error(error)
+      messageUtil.error(t('failedToResponse'))
+      session.popLastMessage()
+    }
+  } finally {
+    session.loading = false
+    session.abortController = null
+  }
+}
+
+async function applyQuickAction(actionKey: keyof typeof buildInPrompt) {
+  if (!checkApiKey()) return
+
+  const selectedText = await Word.run(async ctx => {
+    const range = ctx.document.getSelection()
+    range.load('text')
+    await ctx.sync()
+    return range.text
+  })
+
+  if (!selectedText) {
+    messageUtil.error(t('selectTextPrompt'))
+    return
+  }
+
+  const builtInPrompts = getBuiltInPrompt()
+  const action = builtInPrompts[actionKey]
+  const { replyLanguage: lang } = settingForm.value
+
+  const systemMessage = action.system(lang)
+  const userMessage = new HumanMessage(action.user(selectedText, lang))
+
+  scrollToBottom()
+
+  session.loading = true
+  session.createAbortController()
+
+  try {
+    await processChat(userMessage, systemMessage)
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      messageUtil.info(t('generationStop'))
+    } else {
+      console.error(error)
+      messageUtil.error(t('failedToProcessAction'))
+      session.popLastMessage()
+    }
+  } finally {
+    session.loading = false
+    session.abortController = null
+  }
+}
+
+// --- Document insertion ---
+
 async function insertToDocument(content: string, type: insertTypes) {
   insertType.value = type
-
   if (useWordFormatting.value) {
     await insertFormattedResult(content, insertType)
   } else {
@@ -822,188 +666,39 @@ function copyToClipboard(text: string) {
   messageUtil.success(t('copied'))
 }
 
-function checkApiKey() {
-  const auth = {
-    type: settingForm.value.api as supportedPlatforms,
-    apiKey: settingForm.value.officialAPIKey,
-    azureAPIKey: settingForm.value.azureAPIKey,
-    geminiAPIKey: settingForm.value.geminiAPIKey,
-    groqAPIKey: settingForm.value.groqAPIKey,
-  }
-  if (!checkAuth(auth)) {
-    messageUtil.error(t('noAPIKey'))
-    return false
-  }
-  return true
+// --- Checkpoint / thread selection ---
+
+async function onRestore(checkpointId: string) {
+  await session.handleRestore(checkpointId)
+  showCheckpoints.value = false
+  scrollToBottom()
 }
 
-const THINK_TAG = '<think>'
-const THINK_TAG_END = '</think>'
-
-interface RenderSegment {
-  type: 'text' | 'think'
-  text: string
+async function onSelectThread(newThreadId: string) {
+  await session.handleSelectThread(newThreadId)
+  showCheckpoints.value = false
+  scrollToBottom()
 }
 
-const flattenContentArray = (content: any[]): string =>
-  content
-    .map((part: any) => {
-      if (typeof part === 'string') return part
-      if (part?.text && typeof part.text === 'string') return part.text
-      if (part?.data && typeof part.data === 'string') return part.data
-      return ''
-    })
-    .join('')
-
-const getMessageText = (msg: Message): string => {
-  const content: any = (msg as any).content
-  if (typeof content === 'string') return content
-  if (Array.isArray(content)) return flattenContentArray(content)
-  return ''
-}
-
-const cleanMessageText = (msg: Message): string => {
-  const raw = getMessageText(msg)
-  const regex = new RegExp(`${THINK_TAG}[\\s\\S]*?${THINK_TAG_END}`, 'g')
-  return raw.replace(regex, '').trim()
-}
-
-const splitThinkSegments = (text: string): RenderSegment[] => {
-  if (!text) return []
-
-  const segments: RenderSegment[] = []
-  let cursor = 0
-
-  while (cursor < text.length) {
-    const start = text.indexOf(THINK_TAG, cursor)
-    if (start === -1) {
-      segments.push({ type: 'text', text: text.slice(cursor) })
-      break
-    }
-
-    if (start > cursor) {
-      segments.push({ type: 'text', text: text.slice(cursor, start) })
-    }
-
-    const end = text.indexOf(THINK_TAG_END, start + THINK_TAG.length)
-    if (end === -1) {
-      segments.push({
-        type: 'think',
-        text: text.slice(start + THINK_TAG.length),
-      })
-      break
-    }
-
-    segments.push({
-      type: 'think',
-      text: text.slice(start + THINK_TAG.length, end),
-    })
-    cursor = end + THINK_TAG_END.length
-  }
-
-  return segments.filter(segment => segment.text)
-}
-
-const renderSegments = (msg: Message): RenderSegment[] => {
-  const raw = getMessageText(msg)
-  return splitThinkSegments(raw)
-}
+// --- Settings watch ---
 
 const addWatch = () => {
   watch(
     () => settingForm.value.replyLanguage,
-    () => {
-      localStorage.setItem(localStorageKey.replyLanguage, settingForm.value.replyLanguage)
-    },
+    () => localStorage.setItem(localStorageKey.replyLanguage, settingForm.value.replyLanguage),
   )
   watch(
     () => settingForm.value.api,
-    () => {
-      localStorage.setItem(localStorageKey.api, settingForm.value.api)
-    },
+    () => localStorage.setItem(localStorageKey.api, settingForm.value.api),
   )
 }
 
-async function initData() {
-  insertType.value = (localStorage.getItem(localStorageKey.insertType) as insertTypes) || 'replace'
-}
+// --- Init ---
 
-async function handleRestore(checkpointId: string) {
-  currentCheckpointId.value = checkpointId
-  showCheckpoints.value = false
-
-  // Fetch the history up to the selected checkpoint
-  const checkpointTuple = await saver.getTuple({
-    configurable: { thread_id: threadId.value, checkpoint_id: checkpointId },
-  })
-
-  if (checkpointTuple) {
-    const messages = checkpointTuple.checkpoint.channel_values.messages
-    if (messages && Array.isArray(messages)) {
-      history.value = messages
-        .filter((msg: any) => ['human', 'ai'].includes(msg.type))
-        .map((msg: any) => {
-          return msg.type === 'human' ? new HumanMessage(msg.content) : new AIMessage(msg.content)
-        })
-    }
-  }
-}
-
-async function loadThreadHistory(targetThreadId: string) {
-  const checkpoints: CheckpointTuple[] = []
-  const iterator = saver.list({
-    configurable: { thread_id: targetThreadId },
-  })
-
-  for await (const checkpoint of iterator) {
-    checkpoints.push(checkpoint)
-  }
-
-  if (checkpoints.length > 0) {
-    checkpoints.sort((a, b) => (a.metadata?.step ?? 0) - (b.metadata?.step ?? 0))
-
-    const latestCheckpoint = checkpoints[checkpoints.length - 1]
-    const messages = latestCheckpoint.checkpoint.channel_values.messages
-    // TODO: 优化过滤策略
-    if (messages && Array.isArray(messages)) {
-      history.value = messages
-        .filter((msg: any) => ['human', 'ai'].includes(msg.type))
-        .map((msg: any) => {
-          return msg.type === 'human' ? new HumanMessage(msg.content) : new AIMessage(msg.content)
-        })
-      currentCheckpointId.value = latestCheckpoint.config.configurable?.checkpoint_id || ''
-    } else {
-      history.value = []
-      currentCheckpointId.value = ''
-    }
-  } else {
-    // No checkpoints found for this thread
-    history.value = []
-    currentCheckpointId.value = ''
-  }
-  await scrollToBottom()
-}
-
-async function handleSelectThread(newThreadId: string) {
-  threadId.value = newThreadId
-  showCheckpoints.value = false
-  await loadThreadHistory(newThreadId)
-}
-
-onBeforeMount(() => {
+onBeforeMount(async () => {
   addWatch()
-  initData()
-  loadSavedPrompts()
-
-  if (threadId.value) {
-    loading.value = true // 可选：显示加载状态
-    try {
-      loadThreadHistory(threadId.value)
-    } catch (e) {
-      console.error('Auto reload history failed:', e)
-    } finally {
-      loading.value = false
-    }
-  }
+  insertType.value = (localStorage.getItem(localStorageKey.insertType) as insertTypes) || 'replace'
+  prompts.load()
+  await session.initFromStorage()
 })
 </script>

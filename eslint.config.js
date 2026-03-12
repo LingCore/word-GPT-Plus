@@ -91,7 +91,7 @@ export default defineConfig(
       '@typescript-eslint/no-non-null-asserted-optional-chain': 'off',
       '@typescript-eslint/no-var-requires': 'off',
       '@typescript-eslint/no-empty-interface': 'off',
-      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-empty-object-type': 'off', // {} is a totally useful and valid type.
       '@typescript-eslint/no-require-imports': 'off',
       '@typescript-eslint/no-inferrable-types': 'off',

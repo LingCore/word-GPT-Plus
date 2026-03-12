@@ -1,10 +1,10 @@
-import { Messages } from '@langchain/langgraph'
-import { Ref } from 'vue'
+import type { StructuredToolInterface } from '@langchain/core/tools'
+import type { Messages } from '@langchain/langgraph'
+import type { Ref } from 'vue'
 
 export interface BaseChatCompletionOptions {
   messages: Messages
-  result: Ref<string>
-  errorIssue: Ref<boolean | string | null> // extends string for specific issues
+  errorIssue: Ref<boolean | string | null>
   loading: Ref<boolean>
   maxTokens?: number
   temperature?: number
@@ -51,16 +51,15 @@ export interface AzureOptions extends BaseChatCompletionOptions {
 
 export type ProviderOptions = OpenAIOptions | OllamaOptions | GroqOptions | GeminiOptions | AzureOptions
 
-type supportedProviders = 'official' | 'ollama' | 'groq' | 'gemini' | 'azure'
-// Agent options with tools support
+export type SupportedProvider = 'official' | 'ollama' | 'groq' | 'gemini' | 'azure'
+
 export interface AgentOptions extends BaseChatCompletionOptions {
-  provider: supportedProviders
-  tools?: any[]
-  onToolCall?: (toolName: string, args: any) => void
+  provider: SupportedProvider
+  tools?: StructuredToolInterface[]
+  onToolCall?: (toolName: string, args: Record<string, unknown>) => void
   onToolResult?: (toolName: string, result: string) => void
   recursionLimit?: number
   checkpointId?: string
-  // Provider-specific options
   model?: string
   config?: {
     apiKey: string

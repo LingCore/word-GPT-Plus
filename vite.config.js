@@ -15,4 +15,15 @@ export default defineConfig({
       'node:async_hooks': fileURLToPath(new URL('./async_hook.js', import.meta.url)),
     },
   },
+  build: {
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          langchain: ['langchain', '@langchain/core', '@langchain/langgraph'],
+          vendor: ['vue', 'vue-router', 'pinia', 'vue-i18n'],
+        },
+      },
+    },
+  },
 })

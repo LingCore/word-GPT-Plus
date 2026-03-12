@@ -171,6 +171,47 @@ onMounted(() => {
   background: linear-gradient(90deg, #f59e0b, #fbbf24);
 }
 
+/* Dark theme overrides */
+[data-theme='dark'] .toast-error {
+  border-color: rgb(153 27 27 / 60%);
+  color: #fca5a5;
+  background: linear-gradient(135deg, rgb(127 29 29 / 90%) 0%, rgb(153 27 27 / 85%) 100%);
+}
+
+[data-theme='dark'] .toast-error .toast-icon svg {
+  color: #f87171;
+}
+
+[data-theme='dark'] .toast-success {
+  border-color: rgb(22 101 52 / 60%);
+  color: #86efac;
+  background: linear-gradient(135deg, rgb(20 83 45 / 90%) 0%, rgb(22 101 52 / 85%) 100%);
+}
+
+[data-theme='dark'] .toast-success .toast-icon svg {
+  color: #4ade80;
+}
+
+[data-theme='dark'] .toast-info {
+  border-color: rgb(30 64 175 / 60%);
+  color: #93c5fd;
+  background: linear-gradient(135deg, rgb(30 58 138 / 90%) 0%, rgb(30 64 175 / 85%) 100%);
+}
+
+[data-theme='dark'] .toast-info .toast-icon svg {
+  color: #60a5fa;
+}
+
+[data-theme='dark'] .toast-warning {
+  border-color: rgb(146 64 14 / 60%);
+  color: #fcd34d;
+  background: linear-gradient(135deg, rgb(120 53 15 / 90%) 0%, rgb(146 64 14 / 85%) 100%);
+}
+
+[data-theme='dark'] .toast-warning .toast-icon svg {
+  color: #fbbf24;
+}
+
 .toast-slide-enter-active,
 .toast-slide-leave-active {
   transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);

@@ -49,4 +49,5 @@ export const localStorageKey = {
   proxy: 'proxy',
   defaultSystemPrompt: 'defaultSystemPrompt',
   defaultPrompt: 'defaultPrompt',
+  theme: 'theme',
 } as const

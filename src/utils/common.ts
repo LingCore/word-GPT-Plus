@@ -47,6 +47,11 @@ export const optionLists = {
   ],
   apiList: getOptionList(availableAPIs),
   replyLanguageList: getOptionList(languageMap, 'value'),
+  themeList: [
+    { label: 'themeLight', value: 'light' },
+    { label: 'themeDark', value: 'dark' },
+    { label: 'themeSystem', value: 'system' },
+  ],
 }
 
 export const getLabel = (key: string) => `${key}Label`

@@ -81,6 +81,26 @@
               </SingleSelect>
             </SettingCard>
             <SettingCard>
+              <SingleSelect
+                v-model="settingForm.theme"
+                :tight="false"
+                :key-list="settingPreset.theme.optionObj.map(item => item.value)"
+                :title="$t('themeLabel')"
+                :fronticon="false"
+                :placeholder="
+                  $t(settingPreset.theme.optionObj.find(option => option.value === settingForm.theme)?.label || '') ||
+                  settingForm.theme
+                "
+              >
+                <template #item="{ item }">
+                  {{
+                    $t(settingPreset.theme.optionObj.find(option => option.value === item)?.label || '') || item
+                  }}
+                </template>
+              </SingleSelect>
+            </SettingCard>
+
+            <SettingCard>
               <CustomInput
                 v-model.number="settingForm.agentMaxIterations"
                 :title="$t('agentMaxIterationsLabel')"
@@ -450,6 +470,7 @@ import CustomInput from '@/components/CustomInput.vue'
 import SettingCard from '@/components/SettingCard.vue'
 import SettingSection from '@/components/SettingSection.vue'
 import SingleSelect from '@/components/SingleSelect.vue'
+import { useToolPrefsStore } from '@/stores'
 import { getLabel, getPlaceholder } from '@/utils/common'
 import { availableAPIs, buildInPrompt } from '@/utils/constant'
 import { getGeneralToolDefinitions } from '@/utils/generalTools'
@@ -459,6 +480,7 @@ import { getWordToolDefinitions } from '@/utils/wordTools'
 const { t } = useI18n()
 const router = useRouter()
 const settingForm = useSettingForm()
+const toolPrefs = useToolPrefsStore()
 
 const currentTab = ref('provider')
 
@@ -512,9 +534,7 @@ const editingBuiltinPrompt = ref<{
 
 const originalBuiltInPrompts = { ...buildInPrompt }
 
-// Tool enable/disable state
-const enabledWordTools = ref<Set<string>>(new Set())
-const enabledGeneralTools = ref<Set<string>>(new Set())
+// Tool enable/disable state is managed by toolPrefsStore
 
 const tabs = [
   { id: 'general', label: 'general', defaultLabel: 'General', icon: Globe },
@@ -790,69 +810,29 @@ const getUserPromptPreview = (userFunc: (text: string, language: string) => stri
   return full.length > 100 ? full.substring(0, 100) + '...' : full
 }
 
-const loadToolPreferences = () => {
-  const wordTools = localStorage.getItem('enabledWordTools')
-  const generalTools = localStorage.getItem('enabledGeneralTools')
-
-  if (wordTools) {
-    try {
-      enabledWordTools.value = new Set(JSON.parse(wordTools))
-    } catch {
-      enabledWordTools.value = new Set(getWordToolDefinitions().map(t => t.name))
-    }
-  } else {
-    enabledWordTools.value = new Set(getWordToolDefinitions().map(t => t.name))
-  }
-
-  if (generalTools) {
-    try {
-      enabledGeneralTools.value = new Set(JSON.parse(generalTools))
-    } catch {
-      const generalToolNames = getGeneralToolDefinitions().map(t => t.name)
-      enabledGeneralTools.value = new Set(generalToolNames)
-    }
-  } else {
-    const generalToolNames = getGeneralToolDefinitions().map(t => t.name)
-    enabledGeneralTools.value = new Set(generalToolNames)
-  }
-}
-
-const saveToolPreferences = () => {
-  localStorage.setItem('enabledWordTools', JSON.stringify([...enabledWordTools.value]))
-  localStorage.setItem('enabledGeneralTools', JSON.stringify([...enabledGeneralTools.value]))
-}
-
 const toggleTool = (toolName: string, isWordTool: boolean) => {
   if (isWordTool) {
-    if (enabledWordTools.value.has(toolName)) {
-      enabledWordTools.value.delete(toolName)
-    } else {
-      enabledWordTools.value.add(toolName)
-    }
+    toolPrefs.toggleWordTool(toolName as import('@/utils/wordTools').WordToolName)
   } else {
-    if (enabledGeneralTools.value.has(toolName)) {
-      enabledGeneralTools.value.delete(toolName)
-    } else {
-      enabledGeneralTools.value.add(toolName)
-    }
+    toolPrefs.toggleGeneralTool(toolName as import('@/utils/generalTools').GeneralToolName)
   }
-  saveToolPreferences()
 }
 
 const isToolEnabled = (toolName: string, isWordTool: boolean): boolean => {
-  return isWordTool ? enabledWordTools.value.has(toolName) : enabledGeneralTools.value.has(toolName)
+  if (isWordTool) {
+    return toolPrefs.isWordToolEnabled(toolName as import('@/utils/wordTools').WordToolName)
+  }
+  return toolPrefs.isGeneralToolEnabled(toolName as import('@/utils/generalTools').GeneralToolName)
 }
 
 const isGeneralTool = (toolName: string): boolean => {
-  const generalToolNames = getGeneralToolDefinitions().map(t => t.name)
-  return generalToolNames.includes(toolName as any)
+  return toolPrefs.allGeneralTools.includes(toolName as import('@/utils/generalTools').GeneralToolName)
 }
 
 onBeforeMount(() => {
   loadPrompts()
   loadCustomModels()
   loadBuiltInPrompts()
-  loadToolPreferences()
   addWatch()
 })
 

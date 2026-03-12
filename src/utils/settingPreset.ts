@@ -1,3 +1,4 @@
+import { applyTheme } from '@/composables/useTheme'
 import { i18n } from '@/i18n'
 
 import { forceNumber, optionLists } from './common'
@@ -74,6 +75,7 @@ export const Setting_Names = [
   'systemPrompt',
   'userPrompt',
   'agentMaxIterations',
+  'theme',
 ] as const
 
 export type SettingNames = (typeof Setting_Names)[number]
@@ -176,4 +178,13 @@ export const settingPreset = {
   systemPrompt: inputSetting('', 'defaultSystemPrompt'),
   userPrompt: inputSetting('', 'defaultPrompt'),
   agentMaxIterations: inputNumSetting(25, 'agentMaxIterations', 'maxTokens'),
+  theme: {
+    ...inputSetting('system'),
+    type: 'select',
+    optionObj: optionLists.themeList,
+    saveFunc: (value: string) => {
+      applyTheme(value as 'light' | 'dark' | 'system')
+      localStorage.setItem(localStorageKey.theme, value)
+    },
+  },
 } as const satisfies Record<SettingNames, ISettingOption<any>>
