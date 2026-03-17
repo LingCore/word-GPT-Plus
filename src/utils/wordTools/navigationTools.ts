@@ -9,7 +9,7 @@ const navigationToolDefinitions: Record<string, WordToolDefinition> = {
       },
       required: ['scope'],
     },
-    execute: async (args: Record<string, unknown>) => {
+    execute: async (args) => {
       const { scope } = args as { scope: string }
       return Word.run(async context => {
         if (scope === 'All') {
@@ -32,7 +32,7 @@ const navigationToolDefinitions: Record<string, WordToolDefinition> = {
       },
       required: ['name'],
     },
-    execute: async (args: Record<string, unknown>) => {
+    execute: async (args) => {
       const { name } = args as { name: string }
       return Word.run(async context => {
         const bookmarkName = name.replace(/\s+/g, '_')
@@ -42,8 +42,10 @@ const navigationToolDefinitions: Record<string, WordToolDefinition> = {
 
         for (const cc of contentControls.items) {
           cc.load(['tag', 'title'])
-          await context.sync()
+        }
+        await context.sync()
 
+        for (const cc of contentControls.items) {
           if (cc.tag === `bookmark_${bookmarkName}` || cc.title === bookmarkName) {
             cc.select()
             await context.sync()

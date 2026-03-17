@@ -14,7 +14,7 @@ const writeToolDefinitions: Record<string, WordToolDefinition> = {
       },
       required: ['text'],
     },
-    execute: async (args: Record<string, unknown>) => {
+    execute: async (args) => {
       const { text, location = 'End' } = args as { text: string; location?: string }
       return Word.run(async context => {
         const range = context.document.getSelection()
@@ -35,7 +35,7 @@ const writeToolDefinitions: Record<string, WordToolDefinition> = {
       },
       required: ['newText'],
     },
-    execute: async (args: Record<string, unknown>) => {
+    execute: async (args) => {
       const { newText } = args as { newText: string }
       return Word.run(async context => {
         const range = context.document.getSelection()
@@ -56,7 +56,7 @@ const writeToolDefinitions: Record<string, WordToolDefinition> = {
       },
       required: ['text'],
     },
-    execute: async (args: Record<string, unknown>) => {
+    execute: async (args) => {
       const { text } = args as { text: string }
       return Word.run(async context => {
         context.document.body.insertText(text, 'End')
@@ -87,7 +87,7 @@ const writeToolDefinitions: Record<string, WordToolDefinition> = {
       },
       required: ['text'],
     },
-    execute: async (args: Record<string, unknown>) => {
+    execute: async (args) => {
       const { text, location = 'After', style } = args as { text: string; location?: string; style?: string }
       return Word.run(async context => {
         let paragraph
@@ -122,7 +122,7 @@ const writeToolDefinitions: Record<string, WordToolDefinition> = {
       },
       required: ['rows', 'columns'],
     },
-    execute: async (args: Record<string, unknown>) => {
+    execute: async (args) => {
       const { rows, columns, data } = args as { rows: number; columns: number; data?: string[][] }
       return Word.run(async context => {
         const range = context.document.getSelection()
@@ -150,19 +150,16 @@ const writeToolDefinitions: Record<string, WordToolDefinition> = {
       },
       required: ['items', 'listType'],
     },
-    execute: async (args: Record<string, unknown>) => {
+    execute: async (args) => {
       const { items, listType } = args as { items: string[]; listType: string }
       return Word.run(async context => {
         const range = context.document.getSelection()
         let insertionPoint = range
 
+        const style = listType === 'bullet' ? 'ListBullet' : 'ListNumber'
         for (const item of items) {
           const paragraph = insertionPoint.insertParagraph(item, 'After')
-          if (listType === 'bullet') {
-            paragraph.listItem.level = 0
-          } else {
-            paragraph.listItem.level = 0
-          }
+          paragraph.styleBuiltIn = style as Word.BuiltInStyleName
           insertionPoint = paragraph.getRange('End')
         }
         await context.sync()
@@ -186,7 +183,7 @@ const writeToolDefinitions: Record<string, WordToolDefinition> = {
       },
       required: [],
     },
-    execute: async (args: Record<string, unknown>) => {
+    execute: async (args) => {
       const { direction = 'After' } = args as { direction?: string }
       return Word.run(async context => {
         const range = context.document.getSelection()
@@ -218,7 +215,7 @@ const writeToolDefinitions: Record<string, WordToolDefinition> = {
       },
       required: [],
     },
-    execute: async (args: Record<string, unknown>) => {
+    execute: async (args) => {
       const { location = 'After' } = args as { location?: string }
       return Word.run(async context => {
         const range = context.document.getSelection()
@@ -232,11 +229,15 @@ const writeToolDefinitions: Record<string, WordToolDefinition> = {
 
   insertImage: {
     name: 'insertImage',
-    description: 'Insert an image from a URL at the current cursor position. The image URL must be accessible.',
+    description:
+      'Insert an image at the current cursor position. Accepts either a base64-encoded image string or a URL (http/https). If a URL is provided, the image will be fetched and converted automatically.',
     inputSchema: {
       type: 'object',
       properties: {
-        imageUrl: { type: 'string', description: 'The URL of the image to insert' },
+        image: {
+          type: 'string',
+          description: 'Base64-encoded image data, or an http/https URL to fetch the image from',
+        },
         width: { type: 'number', description: 'Optional width in points' },
         height: { type: 'number', description: 'Optional height in points' },
         location: {
@@ -245,20 +246,33 @@ const writeToolDefinitions: Record<string, WordToolDefinition> = {
           enum: ['Before', 'After', 'Start', 'End', 'Replace'],
         },
       },
-      required: ['imageUrl'],
+      required: ['image'],
     },
-    execute: async (args: Record<string, unknown>) => {
-      const { imageUrl, width, height, location = 'After' } = args as {
-        imageUrl: string
+    execute: async (args) => {
+      const { image, width, height, location = 'After' } = args as {
+        image: string
         width?: number
         height?: number
         location?: string
       }
+
+      let base64Data = image
+      if (image.startsWith('http://') || image.startsWith('https://')) {
+        const response = await fetch(image)
+        if (!response.ok) return `Failed to fetch image: ${response.status} ${response.statusText}`
+        const blob = await response.blob()
+        const buffer = await blob.arrayBuffer()
+        const bytes = new Uint8Array(buffer)
+        let binary = ''
+        for (const byte of bytes) binary += String.fromCharCode(byte)
+        base64Data = btoa(binary)
+      }
+
       return Word.run(async context => {
         const range = context.document.getSelection()
-        const image = range.insertInlinePictureFromBase64(imageUrl, location as Word.InsertLocation)
-        if (width) image.width = width
-        if (height) image.height = height
+        const pic = range.insertInlinePictureFromBase64(base64Data, location as Word.InsertLocation)
+        if (width) pic.width = width
+        if (height) pic.height = height
         await context.sync()
         return `Successfully inserted image at ${location}`
       })
@@ -275,7 +289,7 @@ const writeToolDefinitions: Record<string, WordToolDefinition> = {
       },
       required: ['name'],
     },
-    execute: async (args: Record<string, unknown>) => {
+    execute: async (args) => {
       const { name } = args as { name: string }
       return Word.run(async context => {
         const range = context.document.getSelection()
@@ -307,7 +321,7 @@ const writeToolDefinitions: Record<string, WordToolDefinition> = {
       },
       required: ['title'],
     },
-    execute: async (args: Record<string, unknown>) => {
+    execute: async (args) => {
       const { title, tag, appearance = 'BoundingBox' } = args as {
         title: string
         tag?: string

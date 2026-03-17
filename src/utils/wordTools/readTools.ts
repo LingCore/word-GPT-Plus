@@ -101,14 +101,15 @@ const readToolDefinitions: Record<string, WordToolDefinition> = {
         tables.load(['items'])
         await context.sync()
 
-        const tableInfos = []
-        for (let i = 0; i < tables.items.length; i++) {
-          const table = tables.items[i]
+        for (const table of tables.items) {
           table.load(['rowCount', 'values'])
-          await context.sync()
-          const columnCount = table.values && table.values[0] ? table.values[0].length : 0
-          tableInfos.push({ index: i, rowCount: table.rowCount, columnCount })
         }
+        await context.sync()
+
+        const tableInfos = tables.items.map((table, i) => {
+          const columnCount = table.values && table.values[0] ? table.values[0].length : 0
+          return { index: i, rowCount: table.rowCount, columnCount }
+        })
 
         return JSON.stringify({ tableCount: tables.items.length, tables: tableInfos }, null, 2)
       })
@@ -127,7 +128,7 @@ const readToolDefinitions: Record<string, WordToolDefinition> = {
       },
       required: ['searchText'],
     },
-    execute: async (args: Record<string, unknown>) => {
+    execute: async (args) => {
       const { searchText, matchCase = false, matchWholeWord = false } = args as {
         searchText: string
         matchCase?: boolean

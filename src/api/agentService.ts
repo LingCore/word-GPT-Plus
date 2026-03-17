@@ -75,9 +75,13 @@ async function executeAgentFlow(model: BaseChatModel, options: AgentOptions): Pr
       }
       if (error.name === 'GraphRecursionError') {
         options.errorIssue.value = 'recursionLimitExceeded'
+      } else {
+        options.errorIssue.value = error.message || true
       }
+    } else {
+      options.errorIssue.value = true
     }
-    console.error(error)
+    console.error('[agentService]', error)
   } finally {
     options.loading.value = false
   }

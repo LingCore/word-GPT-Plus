@@ -18,7 +18,7 @@ const formatToolDefinitions: Record<string, WordToolDefinition> = {
       },
       required: [],
     },
-    execute: async (args: Record<string, unknown>) => {
+    execute: async (args) => {
       const { bold, italic, underline, fontSize, fontColor, highlightColor } = args as {
         bold?: boolean
         italic?: boolean
@@ -54,7 +54,7 @@ const formatToolDefinitions: Record<string, WordToolDefinition> = {
       },
       required: ['searchText', 'replaceText'],
     },
-    execute: async (args: Record<string, unknown>) => {
+    execute: async (args) => {
       const { searchText, replaceText, matchCase = false, matchWholeWord = false } = args as {
         searchText: string
         replaceText: string
@@ -107,7 +107,7 @@ const formatToolDefinitions: Record<string, WordToolDefinition> = {
       },
       required: ['fontName'],
     },
-    execute: async (args: Record<string, unknown>) => {
+    execute: async (args) => {
       const { fontName } = args as { fontName: string }
       return Word.run(async context => {
         const range = context.document.getSelection()

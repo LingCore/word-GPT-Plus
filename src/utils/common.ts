@@ -2,7 +2,10 @@ import { availableAPIs, languageMap } from './constant'
 
 export interface Auth {
   type: supportedPlatforms
-  [propName: string]: any
+  apiKey?: string
+  azureAPIKey?: string
+  geminiAPIKey?: string
+  groqAPIKey?: string
 }
 
 export function checkAuth(auth: Auth): boolean {
@@ -24,7 +27,7 @@ export function checkAuth(auth: Auth): boolean {
   }
 }
 
-export function forceNumber(val: any): number {
+export function forceNumber(val: unknown): number {
   return Number(val) || 0
 }
 
@@ -47,11 +50,6 @@ export const optionLists = {
   ],
   apiList: getOptionList(availableAPIs),
   replyLanguageList: getOptionList(languageMap, 'value'),
-  themeList: [
-    { label: 'themeLight', value: 'light' },
-    { label: 'themeDark', value: 'dark' },
-    { label: 'themeSystem', value: 'system' },
-  ],
 }
 
 export const getLabel = (key: string) => `${key}Label`

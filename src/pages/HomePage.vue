@@ -10,7 +10,7 @@
   />
   <div
     v-show="!showCheckpoints"
-    class="itemse-center relative flex h-full w-full flex-col justify-center bg-bg-secondary p-1"
+    class="items-center relative flex h-full w-full flex-col justify-center bg-bg-secondary p-1"
   >
     <div class="relative flex h-full w-full flex-col gap-2 rounded-md">
       <!-- Header -->
@@ -164,7 +164,7 @@
         <div class="flex items-center justify-between gap-2 overflow-hidden">
           <div class="flex shrink-0 gap-1 rounded-sm border border-border bg-surface p-0.5">
             <button
-              class="cursor-po flex h-7 w-7 items-center justify-center rounded-md border-none text-secondary hover:bg-accent/30 hover:text-white! [.active]:text-accent"
+              class="cursor-pointer flex h-7 w-7 items-center justify-center rounded-md border-none text-secondary hover:bg-accent/30 hover:text-white! [.active]:text-accent"
               :class="{ active: session.mode === 'ask' }"
               title="Ask Mode"
               @click="session.setMode('ask')"
@@ -172,7 +172,7 @@
               <MessageSquare :size="14" />
             </button>
             <button
-              class="cursor-po flex h-7 w-7 items-center justify-center rounded-md border-none text-secondary hover:bg-accent/30 hover:text-white! [.active]:text-accent"
+              class="cursor-pointer flex h-7 w-7 items-center justify-center rounded-md border-none text-secondary hover:bg-accent/30 hover:text-white! [.active]:text-accent"
               :class="{ active: session.mode === 'agent' }"
               title="Agent Mode"
               @click="session.setMode('agent')"
@@ -281,8 +281,9 @@ import { getAgentResponse, getChatResponse } from '@/api/union'
 import CustomButton from '@/components/CustomButton.vue'
 import SingleSelect from '@/components/SingleSelect.vue'
 import { cleanMessageText, renderSegments } from '@/composables'
+import { useModelSelection } from '@/composables/useModelSelection'
 import { buildProviderConfig } from '@/composables/useProviderConfig'
-import { applyTheme, type ThemeValue } from '@/composables/useTheme'
+import { useTheme } from '@/composables/useTheme'
 import CheckPointsPage from '@/pages/checkPointsPage.vue'
 import { usePromptStore, useSessionStore, useToolPrefsStore } from '@/stores'
 import { checkAuth } from '@/utils/common'
@@ -313,121 +314,22 @@ const useWordFormatting = ref(localStorage.getItem(localStorageKey.useWordFormat
 const useSelectedText = ref(localStorage.getItem(localStorageKey.useSelectedText) !== 'false')
 const insertType = ref<insertTypes>('replace')
 
-const isDark = ref(document.documentElement.getAttribute('data-theme') === 'dark')
-
-function toggleTheme() {
-  const next: ThemeValue = isDark.value ? 'light' : 'dark'
-  isDark.value = next === 'dark'
-  localStorage.setItem(localStorageKey.theme, next)
-  applyTheme(next)
-  settingForm.value.theme = next
-}
+const { isDark, toggleTheme } = useTheme()
 
 watch(useWordFormatting, v => localStorage.setItem(localStorageKey.useWordFormatting, String(v)))
 watch(useSelectedText, v => localStorage.setItem(localStorageKey.useSelectedText, String(v)))
 
-const quickActions: {
-  key: keyof typeof buildInPrompt
-  label: string
-  icon: typeof Globe
-}[] = [
+const quickActions = computed<
+  { key: keyof typeof buildInPrompt; label: string; icon: typeof Globe }[]
+>(() => [
   { key: 'translate', label: t('translate'), icon: Globe },
   { key: 'polish', label: t('polish'), icon: Sparkle },
   { key: 'academic', label: t('academic'), icon: BookOpen },
   { key: 'summary', label: t('summary'), icon: FileCheck },
   { key: 'grammar', label: t('grammar'), icon: CheckCircle },
-]
+])
 
-// --- Model selection (kept local as it's tightly coupled to UI) ---
-
-const getCustomModels = (key: string, oldKey: string): string[] => {
-  const stored = localStorage.getItem(key)
-  if (stored) {
-    try {
-      return JSON.parse(stored)
-    } catch {
-      return []
-    }
-  }
-  const oldModel = localStorage.getItem(oldKey)
-  if (oldModel && oldModel.trim()) {
-    return [oldModel]
-  }
-  return []
-}
-
-const currentModelOptions = computed(() => {
-  let presetOptions: string[] = []
-  let customModels: string[] = []
-
-  switch (settingForm.value.api) {
-    case 'official':
-      presetOptions = settingPreset.officialModelSelect.optionList || []
-      customModels = getCustomModels('customModels', 'customModel')
-      break
-    case 'gemini':
-      presetOptions = settingPreset.geminiModelSelect.optionList || []
-      customModels = getCustomModels('geminiCustomModels', 'geminiCustomModel')
-      break
-    case 'ollama':
-      presetOptions = settingPreset.ollamaModelSelect.optionList || []
-      customModels = getCustomModels('ollamaCustomModels', 'ollamaCustomModel')
-      break
-    case 'groq':
-      presetOptions = settingPreset.groqModelSelect.optionList || []
-      customModels = getCustomModels('groqCustomModels', 'groqCustomModel')
-      break
-    case 'azure':
-      return []
-    default:
-      return []
-  }
-
-  return [...presetOptions, ...customModels]
-})
-
-const currentModelSelect = computed({
-  get() {
-    switch (settingForm.value.api) {
-      case 'official':
-        return settingForm.value.officialModelSelect
-      case 'gemini':
-        return settingForm.value.geminiModelSelect
-      case 'ollama':
-        return settingForm.value.ollamaModelSelect
-      case 'groq':
-        return settingForm.value.groqModelSelect
-      case 'azure':
-        return settingForm.value.azureDeploymentName
-      default:
-        return ''
-    }
-  },
-  set(value) {
-    switch (settingForm.value.api) {
-      case 'official':
-        settingForm.value.officialModelSelect = value
-        localStorage.setItem(localStorageKey.model, value)
-        break
-      case 'gemini':
-        settingForm.value.geminiModelSelect = value
-        localStorage.setItem(localStorageKey.geminiModel, value)
-        break
-      case 'ollama':
-        settingForm.value.ollamaModelSelect = value
-        localStorage.setItem(localStorageKey.ollamaModel, value)
-        break
-      case 'groq':
-        settingForm.value.groqModelSelect = value
-        localStorage.setItem(localStorageKey.groqModel, value)
-        break
-      case 'azure':
-        settingForm.value.azureDeploymentName = value
-        localStorage.setItem(localStorageKey.azureDeploymentName, value)
-        break
-    }
-  },
-})
+const { currentModelOptions, currentModelSelect } = useModelSelection(settingForm)
 
 // --- Navigation ---
 

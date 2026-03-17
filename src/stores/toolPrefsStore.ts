@@ -41,7 +41,8 @@ function loadFromStorage<T extends string>(key: string, allValues: T[]): T[] {
     try {
       const parsed = JSON.parse(stored)
       return parsed.filter((name: string) => allValues.includes(name as T))
-    } catch {
+    } catch (e) {
+      console.warn('[toolPrefsStore] Failed to parse stored tools, using defaults:', e)
       return [...allValues]
     }
   }

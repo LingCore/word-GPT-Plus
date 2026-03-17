@@ -13,23 +13,15 @@ window.Office.onReady(() => {
   initTheme()
   installGlobalErrorHandler()
   const app = createApp(App)
-  const debounce = (fn: (...args: unknown[]) => void, delay?: number) => {
-    let timer: number | null = null
-    return function (this: unknown, ...args: unknown[]) {
-      const context = this
-
-      if (timer !== null) clearTimeout(timer)
-      timer = window.setTimeout(() => {
-        fn.apply(context, args)
-      }, delay)
-    }
-  }
-
   const _ResizeObserver = window.ResizeObserver
   window.ResizeObserver = class ResizeObserver extends _ResizeObserver {
     constructor(callback: ResizeObserverCallback) {
-      callback = debounce(callback, 16)
-      super(callback)
+      let timer: number | null = null
+      const debounced: ResizeObserverCallback = (...args) => {
+        if (timer !== null) clearTimeout(timer)
+        timer = window.setTimeout(() => callback(...args), 16)
+      }
+      super(debounced)
     }
   }
   app.use(createPinia())

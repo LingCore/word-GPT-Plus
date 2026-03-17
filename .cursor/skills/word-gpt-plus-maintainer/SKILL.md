@@ -117,6 +117,70 @@ For Word add-in runtime or install changes, also verify:
 - **Secondary button hover = accent (blue).** `CustomButton` type `secondary` hovers to `bg-accent/10!` background + `text-accent!` text/icon. Do not change hover to white.
 - When introducing new theme-aware colors, add CSS custom properties to both the light (`:root`) and dark (`.dark`) blocks in `src/index.css`, then register them in the `@theme` block.
 
+## Code Quality Standards
+
+Follow these standards when writing or reviewing code in this repository. They reflect 2025-2026 industry best practices, tailored to this project's Vue 3 + TypeScript + Office Add-in stack.
+
+### TypeScript Discipline
+
+- **Strict mode is mandatory.** The project uses `"strict": true`; never weaken it.
+- **Eliminate `any`.** Use `unknown` + type narrowing, utility types (`Partial`, `Omit`, `Pick`, `Record`, `ReturnType`, `Awaited`), or Zod schemas instead. The ESLint rule `@typescript-eslint/no-explicit-any` is already set to `warn`—treat warnings as errors in new code.
+- **Prefer discriminated unions** for state that has multiple shapes (e.g., loading/success/error results). Use a literal `status` or `kind` field as the discriminator.
+- **Use `satisfies`** to validate object literals against types without widening. Prefer `satisfies T` over `as T` for config objects and presets.
+- **Type composable return values explicitly.** Even though TypeScript can infer them, explicit return types serve as documentation and catch accidental API changes.
+- **Prefer `interface` for public contracts, `type` for unions/intersections/utilities.** This aligns with TypeScript team recommendations and produces clearer error messages.
+
+### Vue Component Patterns
+
+- **Always use `<script setup lang="ts">`** with type-based `defineProps<T>()` and `defineEmits<T>()`. Never use runtime-only prop declarations.
+- **One concern per component.** If a component handles both data-fetching and rendering, extract the data logic into a composable.
+- **Template refs must be typed**: `const el = ref<HTMLDivElement | null>(null)`.
+- **Avoid deep prop drilling.** For state shared by 3+ levels, use Pinia stores or `provide`/`inject` with `InjectionKey<T>` for type safety.
+- **Keep `<template>` readable.** Extract complex expressions into `computed` properties or methods rather than embedding multi-line ternaries in templates.
+
+### Composable Quality
+
+- **Single responsibility.** Each composable owns one concern (e.g., `useProviderConfig` builds config, `useMessageRenderer` renders messages).
+- **Return shape convention.** Return an object with named properties (not positional arrays). Include `error` and `isLoading` refs for async composables.
+- **Accept flexible inputs.** Use `MaybeRefOrGetter<T>` (from `@vueuse/core`) for parameters that callers might pass as refs, getters, or plain values.
+- **Lifecycle cleanup.** If a composable sets up listeners, timers, or subscriptions, clean them up in `onUnmounted` or via `watchEffect`'s cleanup callback.
+- **No side effects at import time.** All side effects should happen inside the composable function body, not at the module top level.
+
+### Pinia Store Quality
+
+- **Use Setup Store syntax** (`defineStore('name', () => { ... })`) for maximum type inference and composability.
+- **Feature-scoped stores.** One store per domain (sessions, prompts, tool prefs)—never a monolithic global store.
+- **Destructure with `storeToRefs()`.** Destructuring without it loses reactivity.
+- **Keep API/IO calls out of stores.** Stores call service functions from `src/api/`; they don't import `fetch` or `Word.run` directly.
+- **Avoid cross-store reads in setup scope.** Read other stores inside actions/getters to prevent initialization-order bugs.
+
+### Error Handling
+
+- **Word API**: Always wrap `Word.run` calls in try-catch. Inspect `error.code` (from `OfficeExtension.ErrorCodes`) rather than parsing `error.message`. Batch proxy operations with minimal `context.sync()` calls.
+- **LangChain/AI runtime**: Surface streaming and tool errors through structured result objects (`{ status, data?, error? }`), not thrown exceptions that break the stream.
+- **Composables**: Expose error state via a `Ref<Error | null>` rather than logging internally. Let consuming components decide how to display errors.
+- **Never swallow errors silently.** Empty `catch {}` blocks are prohibited. At minimum, track errors via `errorTracker`.
+
+### Styling (Tailwind CSS v4)
+
+- **Use the three-layer token hierarchy**: primitives → semantic → component tokens, all defined in `src/index.css` via `@theme` and CSS custom properties.
+- **Never hard-code color values** in templates or `<style>` blocks. Use existing semantic tokens (`bg-surface`, `text-main`, `border-border`) or define new ones in both `:root` and `.dark` blocks.
+- **Scrollbar and pseudo-element styles** go in `src/index.css` only—they don't work under Vue's `scoped` attribute.
+
+### Testing
+
+- **Test composables and utils in isolation.** Use `setActivePinia(createPinia())` for store-dependent tests. Use `@pinia/testing`'s `createTestingPinia()` for component tests.
+- **Name test files with `.test.ts` suffix**, co-located under `__tests__/` next to the module they test.
+- **Follow Arrange-Act-Assert.** Each test should clearly set up state, perform one action, and assert the outcome.
+- **Mock external boundaries** (Office API, network, IndexedDB) but avoid mocking internal modules—test through their public API instead.
+
+### Import & Module Organization
+
+- **Imports are auto-sorted by `simple-import-sort`.** Don't fight the sort order; let the ESLint auto-fix handle it.
+- **Use `@/` path alias** for all cross-directory imports within `src/`.
+- **Barrel exports** (`index.ts`) are fine for stores and composables. Avoid barrel exports for large utility collections where tree-shaking matters.
+- **Circular dependency detection** is enforced via `dpdm`. Run `npm run lint:dpdm` when restructuring modules.
+
 ## Review Standard
 
 When reviewing changes in this repo, prioritize:
@@ -126,6 +190,9 @@ When reviewing changes in this repo, prioritize:
 3. Word tool safety and document mutation risks
 4. reintroduction of `any`, page bloat, or scattered storage logic
 5. missing validation for build/test/install flows
+6. composable/store violations (side effects at import time, missing cleanup, lost reactivity)
+7. error handling gaps (swallowed errors, untyped catch blocks, missing error state exposure)
+8. hard-coded style values bypassing the design token system
 
 ## Additional Reference
 

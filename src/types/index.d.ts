@@ -1,4 +1,4 @@
-type IStringKeyMap = Record<string, any>
+type IStringKeyMap = Record<string, string>
 
 type supportedPlatforms = 'official' | 'azure' | 'gemini' | 'ollama' | 'groq'
 
@@ -15,11 +15,11 @@ interface ToolProperty {
   description?: string
   enum?: string[]
   items?: ToolProperty
-  default?: any
+  default?: string | number | boolean
 }
 interface WordToolDefinition {
   name: string
   description: string
   inputSchema: ToolInputSchema
-  execute: (args: Record<string, any>) => Promise<string>
+  execute: (args: Record<string, unknown>) => Promise<string>
 }

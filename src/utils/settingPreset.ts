@@ -1,4 +1,4 @@
-import { applyTheme } from '@/composables/useTheme'
+
 import { i18n } from '@/i18n'
 
 import { forceNumber, optionLists } from './common'
@@ -7,7 +7,7 @@ import { localStorageKey } from './enum'
 
 type componentType = 'input' | 'select' | 'inputNum'
 
-const getCustomModels = (key: string, oldKey: string): string[] => {
+export const getCustomModels = (key: string, oldKey: string): string[] => {
   const stored = localStorage.getItem(key)
   if (stored) {
     try {
@@ -75,7 +75,6 @@ export const Setting_Names = [
   'systemPrompt',
   'userPrompt',
   'agentMaxIterations',
-  'theme',
 ] as const
 
 export type SettingNames = (typeof Setting_Names)[number]
@@ -178,13 +177,4 @@ export const settingPreset = {
   systemPrompt: inputSetting('', 'defaultSystemPrompt'),
   userPrompt: inputSetting('', 'defaultPrompt'),
   agentMaxIterations: inputNumSetting(25, 'agentMaxIterations', 'maxTokens'),
-  theme: {
-    ...inputSetting('system'),
-    type: 'select',
-    optionObj: optionLists.themeList,
-    saveFunc: (value: string) => {
-      applyTheme(value as 'light' | 'dark' | 'system')
-      localStorage.setItem(localStorageKey.theme, value)
-    },
-  },
-} as const satisfies Record<SettingNames, ISettingOption<any>>
+} as const satisfies Record<SettingNames, ISettingOption<string> | ISettingOption<number> | ISettingOption<string[]>>

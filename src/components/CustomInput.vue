@@ -2,8 +2,8 @@
   <div class="flex flex-col">
     <div class="mb-1 flex items-center gap-2">
       <label class="text-sm font-semibold text-secondary"
-        >{{ title }}
-        <span v-if="required" class="ml-1 text-danger">*</span>
+        >{{ props.title }}
+        <span v-if="props.required" class="ml-1 text-danger">*</span>
       </label>
       <slot name="title-extra"></slot>
     </div>
@@ -12,11 +12,11 @@
         v-model="modelValue"
         :type="type"
         v-bind="$attrs"
-        class="box-border h-8 w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 pr-10 text-sm text-main transition-all duration-200 ease-apple focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-        :placeholder="placeholder"
+        class="box-border h-8 min-w-0 flex-1 rounded-md border border-border bg-bg-tertiary px-2 py-1.5 pr-10 text-sm text-main transition-all duration-200 ease-apple focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+        :placeholder="props.placeholder"
       />
       <button
-        v-if="isPassword"
+        v-if="props.isPassword"
         type="button"
         class="absolute top-1/2 right-3 flex -translate-y-1/2 items-center justify-center text-main"
         @click="type = type === 'password' ? 'text' : 'password'"
@@ -31,16 +31,16 @@
 
 <script setup lang="ts">
 import { EyeClosedIcon, EyeIcon } from 'lucide-vue-next'
-import { onMounted, ref } from 'vue'
+import { ref, watchEffect } from 'vue'
 
-const [modelValue, modifiers] = defineModel<any>({
+const [modelValue, modifiers] = defineModel<string | number>({
   set(value) {
     let result = value
     if (modifiers.trim && typeof result === 'string') {
       result = result.trim()
     }
     if (modifiers.number) {
-      const n = parseFloat(result)
+      const n = parseFloat(String(result))
       result = isNaN(n) ? result : n
     }
     return result
@@ -49,13 +49,7 @@ const [modelValue, modifiers] = defineModel<any>({
 
 const type = ref('text')
 
-const {
-  isPassword = false,
-  title,
-  inputType = 'text',
-  placeholder,
-  required = false,
-} = defineProps<{
+const props = defineProps<{
   isPassword?: boolean
   title: string
   inputType?: string
@@ -67,11 +61,7 @@ defineOptions({
   inheritAttrs: false,
 })
 
-onMounted(() => {
-  if (isPassword) {
-    type.value = 'password'
-  } else {
-    type.value = inputType
-  }
+watchEffect(() => {
+  type.value = props.isPassword ? 'password' : (props.inputType ?? 'text')
 })
 </script>

@@ -46,59 +46,21 @@
             class="flex h-full w-full flex-col items-center gap-2 bg-bg-secondary p-1"
           >
             <SettingCard>
-              <SingleSelect
+              <OptionSelect
                 v-model="settingForm.localLanguage"
-                :tight="false"
-                :key-list="settingPreset.localLanguage.optionObj.map(item => item.value)"
+                :options="settingPreset.localLanguage.optionObj"
                 :title="$t('localLanguageLabel')"
-                :fronticon="false"
-                :placeholder="
-                  settingPreset.localLanguage.optionObj.find(option => option.value === settingForm.localLanguage)
-                    ?.label || settingForm.localLanguage
-                "
-              >
-                <template #item="{ item }">
-                  {{ settingPreset.localLanguage.optionObj.find(option => option.value === item)?.label || item }}
-                </template>
-              </SingleSelect>
+              />
             </SettingCard>
 
             <SettingCard>
-              <SingleSelect
+              <OptionSelect
                 v-model="settingForm.replyLanguage"
-                :tight="false"
-                :key-list="settingPreset.replyLanguage.optionObj.map(item => item.value)"
+                :options="settingPreset.replyLanguage.optionObj"
                 :title="$t('replyLanguageLabel')"
-                :fronticon="false"
-                :placeholder="
-                  settingPreset.replyLanguage.optionObj.find(option => option.value === settingForm.replyLanguage)
-                    ?.label || settingForm.replyLanguage
-                "
-              >
-                <template #item="{ item }">
-                  {{ settingPreset.replyLanguage.optionObj.find(option => option.value === item)?.label || item }}
-                </template>
-              </SingleSelect>
+              />
             </SettingCard>
-            <SettingCard>
-              <SingleSelect
-                v-model="settingForm.theme"
-                :tight="false"
-                :key-list="settingPreset.theme.optionObj.map(item => item.value)"
-                :title="$t('themeLabel')"
-                :fronticon="false"
-                :placeholder="
-                  $t(settingPreset.theme.optionObj.find(option => option.value === settingForm.theme)?.label || '') ||
-                  settingForm.theme
-                "
-              >
-                <template #item="{ item }">
-                  {{
-                    $t(settingPreset.theme.optionObj.find(option => option.value === item)?.label || '') || item
-                  }}
-                </template>
-              </SingleSelect>
-            </SettingCard>
+
 
             <SettingCard>
               <CustomInput
@@ -116,26 +78,12 @@
           <!-- API Provider Settings -->
           <div v-show="currentTab === 'provider'" class="flex w-full flex-col items-center gap-2 bg-bg-secondary p-1">
             <SettingCard>
-              <SingleSelect
+              <OptionSelect
                 v-model="settingForm.api"
-                :tight="false"
-                :key-list="settingPreset.api.optionObj.map(item => item.value)"
+                :options="settingPreset.api.optionObj"
                 :title="$t('providerLabel')"
-                :fronticon="false"
-                :placeholder="
-                  settingPreset.api.optionObj
-                    .find(option => option.value === settingForm.api)
-                    ?.label.replace('official', 'OpenAI') || settingForm.api
-                "
-              >
-                <template #item="{ item }">
-                  {{
-                    settingPreset.api.optionObj
-                      .find(option => option.value === item)
-                      ?.label.replace('official', 'OpenAI') || item
-                  }}
-                </template>
-              </SingleSelect>
+                :label-transform="(label: string) => label.replace('official', 'OpenAI')"
+              />
             </SettingCard>
 
             <!-- Dynamic API Configuration -->
@@ -153,7 +101,7 @@
               </SettingCard>
 
               <SettingCard v-if="hasCustomModelsSupport(platform)" p1>
-                <div class="flex flex-col items-start gap-2 p-3">
+                <div class="flex flex-col items-stretch gap-2 p-3">
                   <CustomInput
                     v-model="newCustomModel[platform]"
                     :title="t('customModelsLabel')"
@@ -164,7 +112,7 @@
                       <CustomButton
                         :icon="Plus"
                         text=""
-                        class="bg-surface p-2!"
+                        class="aspect-square bg-surface"
                         type="secondary"
                         @click="addCustomModel(platform)"
                       />
@@ -237,7 +185,7 @@
               </div>
 
               <div
-                v-for="prompt in savedPrompts"
+                v-for="prompt in prompts.savedPrompts"
                 :key="prompt.id"
                 class="rounded-md border border-border bg-surface p-3"
               >
@@ -263,7 +211,7 @@
                       @click="startEditPrompt(prompt)"
                     />
                     <CustomButton
-                      v-if="savedPrompts.length > 1"
+                      v-if="prompts.savedPrompts.length > 1"
                       class="border-none! bg-surface! p-1.5!"
                       :title="t('delete')"
                       type="secondary"
@@ -467,10 +415,12 @@ import { useRouter } from 'vue-router'
 
 import CustomButton from '@/components/CustomButton.vue'
 import CustomInput from '@/components/CustomInput.vue'
+import OptionSelect from '@/components/OptionSelect.vue'
 import SettingCard from '@/components/SettingCard.vue'
 import SettingSection from '@/components/SettingSection.vue'
 import SingleSelect from '@/components/SingleSelect.vue'
-import { useToolPrefsStore } from '@/stores'
+import { usePromptStore, useToolPrefsStore } from '@/stores'
+import type { SavedPrompt } from '@/stores/promptStore'
 import { getLabel, getPlaceholder } from '@/utils/common'
 import { availableAPIs, buildInPrompt } from '@/utils/constant'
 import { getGeneralToolDefinitions } from '@/utils/generalTools'
@@ -481,6 +431,7 @@ const { t } = useI18n()
 const router = useRouter()
 const settingForm = useSettingForm()
 const toolPrefs = useToolPrefsStore()
+const prompts = usePromptStore()
 
 const currentTab = ref('provider')
 
@@ -490,17 +441,8 @@ const wordToolsList = [...getGeneralToolDefinitions(), ...getWordToolDefinitions
 const newCustomModel = ref<Record<string, string>>({})
 const customModelsMap = ref<Record<string, string[]>>({})
 
-// Prompt management
-interface Prompt {
-  id: string
-  name: string
-  systemPrompt: string
-  userPrompt: string
-}
-
-const savedPrompts = ref<Prompt[]>([])
 const editingPromptId = ref<string>('')
-const editingPrompt = ref<Prompt>({
+const editingPrompt = ref<SavedPrompt>({
   id: '',
   name: '',
   systemPrompt: '',
@@ -611,7 +553,8 @@ const addCustomModel = (platform: string) => {
 
   if (!customModelsMap.value[platform].includes(model)) {
     customModelsMap.value[platform].push(model)
-    ;(settingPreset[key] as any).saveFunc(customModelsMap.value[platform])
+    const saveFunc = settingPreset[key].saveFunc as ((v: string[]) => void) | undefined
+    saveFunc?.(customModelsMap.value[platform])
     newCustomModel.value[platform] = ''
   }
 }
@@ -621,14 +564,14 @@ const removeCustomModel = (platform: string, model: string) => {
   if (!key) return
 
   customModelsMap.value[platform] = customModelsMap.value[platform].filter(m => m !== model)
-  ;(settingPreset[key] as any).saveFunc(customModelsMap.value[platform])
+  const saveFunc = settingPreset[key].saveFunc as ((v: string[]) => void) | undefined
+  saveFunc?.(customModelsMap.value[platform])
 
-  // If the removed model was selected, switch to first available
   const selectKey = `${platform}ModelSelect` as SettingNames
   if (settingForm.value[selectKey] === model) {
     const options = getMergedModelOptions(platform)
     if (options.length > 0) {
-      ;(settingForm.value as any)[selectKey] = options[0]
+      ;(settingForm.value as Record<string, string | number | string[]>)[selectKey] = options[0]
     }
   }
 }
@@ -651,66 +594,47 @@ const addWatch = () => {
       () => settingForm.value[key],
       () => {
         if (settingPreset[key].saveFunc) {
-          ;(settingPreset[key] as any).saveFunc(settingForm.value[key])
-          console.log(`Saved setting ${key} via custom saveFunc with value: ${settingForm.value[key]}`)
+          const save = settingPreset[key].saveFunc as (v: string | number | string[]) => void
+          save(settingForm.value[key])
           return
         }
         localStorage.setItem(settingPreset[key].saveKey || key, settingForm.value[key] as string)
-        console.log(`Saved setting ${key} to localStorage with value: ${settingForm.value[key]}`)
       },
       { deep: true },
     )
   })
 }
 
-const loadPrompts = () => {
-  const stored = localStorage.getItem('savedPrompts')
-  if (stored) {
-    try {
-      savedPrompts.value = JSON.parse(stored)
-      return
-    } catch {
-      localStorage.removeItem('savedPrompts')
-    }
-  }
-  savedPrompts.value = [
-    {
+const initPrompts = () => {
+  prompts.load()
+  if (prompts.savedPrompts.length === 0) {
+    prompts.addPrompt({
       id: 'default',
       name: 'Default',
       systemPrompt: settingForm.value.systemPrompt || '',
       userPrompt: settingForm.value.userPrompt || '',
-    },
-  ]
-  savePromptsToStorage()
-}
-
-const savePromptsToStorage = () => {
-  localStorage.setItem('savedPrompts', JSON.stringify(savedPrompts.value))
+    })
+  }
 }
 
 const addNewPrompt = () => {
-  const newPrompt: Prompt = {
+  const newPrompt: SavedPrompt = {
     id: `prompt_${Date.now()}`,
-    name: `Prompt ${savedPrompts.value.length + 1}`,
+    name: `Prompt ${prompts.savedPrompts.length + 1}`,
     systemPrompt: '',
     userPrompt: '',
   }
-  savedPrompts.value.push(newPrompt)
-  savePromptsToStorage()
+  prompts.addPrompt(newPrompt)
   startEditPrompt(newPrompt)
 }
 
-const startEditPrompt = (prompt: Prompt) => {
+const startEditPrompt = (prompt: SavedPrompt) => {
   editingPromptId.value = prompt.id
   editingPrompt.value = { ...prompt }
 }
 
 const savePromptEdit = () => {
-  const index = savedPrompts.value.findIndex(p => p.id === editingPromptId.value)
-  if (index !== -1) {
-    savedPrompts.value[index] = { ...editingPrompt.value }
-    savePromptsToStorage()
-  }
+  prompts.updatePrompt(editingPromptId.value, { ...editingPrompt.value })
   editingPromptId.value = ''
 }
 
@@ -719,13 +643,8 @@ const cancelEdit = () => {
 }
 
 const deletePrompt = (id: string) => {
-  if (savedPrompts.value.length <= 1) return
-
-  const index = savedPrompts.value.findIndex(p => p.id === id)
-  if (index !== -1) {
-    savedPrompts.value.splice(index, 1)
-    savePromptsToStorage()
-  }
+  if (prompts.savedPrompts.length <= 1) return
+  prompts.removePrompt(id)
 }
 
 // Built-in prompts functions
@@ -830,7 +749,7 @@ const isGeneralTool = (toolName: string): boolean => {
 }
 
 onBeforeMount(() => {
-  loadPrompts()
+  initPrompts()
   loadCustomModels()
   loadBuiltInPrompts()
   addWatch()

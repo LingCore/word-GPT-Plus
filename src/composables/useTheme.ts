@@ -1,33 +1,35 @@
+import { ref } from 'vue'
+
 import { localStorageKey } from '@/utils/enum'
 
-export type ThemeValue = 'light' | 'dark' | 'system'
+export type ThemeValue = 'light' | 'dark'
 
-let mediaQueryCleanup: (() => void) | null = null
+const VALID_THEMES: ThemeValue[] = ['light', 'dark']
 
-function resolveSystemTheme(): 'light' | 'dark' {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+function isValidTheme(value: string | null): value is ThemeValue {
+  return value !== null && VALID_THEMES.includes(value as ThemeValue)
 }
 
 export function applyTheme(value: ThemeValue): void {
-  if (mediaQueryCleanup) {
-    mediaQueryCleanup()
-    mediaQueryCleanup = null
-  }
-
-  const resolved = value === 'system' ? resolveSystemTheme() : value
-  document.documentElement.setAttribute('data-theme', resolved)
-
-  if (value === 'system') {
-    const mql = window.matchMedia('(prefers-color-scheme: dark)')
-    const handler = (e: MediaQueryListEvent) => {
-      document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light')
-    }
-    mql.addEventListener('change', handler)
-    mediaQueryCleanup = () => mql.removeEventListener('change', handler)
-  }
+  document.documentElement.setAttribute('data-theme', value)
 }
 
+const isDark = ref(false)
+
 export function initTheme(): void {
-  const stored = localStorage.getItem(localStorageKey.theme) as ThemeValue | null
-  applyTheme(stored ?? 'system')
+  const stored = localStorage.getItem(localStorageKey.theme)
+  const theme: ThemeValue = isValidTheme(stored) ? stored : 'dark'
+  isDark.value = theme === 'dark'
+  applyTheme(theme)
+}
+
+export function useTheme() {
+  function toggleTheme() {
+    const next: ThemeValue = isDark.value ? 'light' : 'dark'
+    isDark.value = next === 'dark'
+    localStorage.setItem(localStorageKey.theme, next)
+    applyTheme(next)
+  }
+
+  return { isDark, toggleTheme }
 }

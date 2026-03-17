@@ -42,10 +42,10 @@ export function createWordTools(enabledTools?: WordToolName[]) {
   const tools = Object.entries(wordToolDefinitions)
     .filter(([name]) => !enabledTools || enabledTools.includes(name as WordToolName))
     .map(([, def]) => {
-      const schemaObj: Record<string, z.ZodTypeAny> = {}
+      const schemaObj: Record<string, z.ZodType> = {}
 
       for (const [propName, prop] of Object.entries(def.inputSchema.properties)) {
-        let zodType: z.ZodTypeAny
+        let zodType: z.ZodType
 
         switch (prop.type) {
           case 'string':
@@ -76,7 +76,7 @@ export function createWordTools(enabledTools?: WordToolName[]) {
       }
 
       return tool(
-        async input => {
+        async (input: Record<string, unknown>) => {
           try {
             return await def.execute(input)
           } catch (error: unknown) {

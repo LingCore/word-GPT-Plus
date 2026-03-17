@@ -38,8 +38,9 @@ async function executeChatFlow(model: BaseChatModel, options: ProviderOptions): 
     if (error instanceof Error && (error.name === 'AbortError' || options.abortSignal?.aborted)) {
       throw error
     }
-    options.errorIssue.value = true
-    console.error(error)
+    const message = error instanceof Error ? error.message : String(error)
+    options.errorIssue.value = message || true
+    console.error('[chatService]', error)
   } finally {
     options.loading.value = false
   }

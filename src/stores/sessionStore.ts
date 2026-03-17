@@ -1,18 +1,19 @@
 import { AIMessage, HumanMessage, Message, SystemMessage } from '@langchain/core/messages'
 import { defineStore } from 'pinia'
 import { v4 as uuidv4 } from 'uuid'
-import { computed, ref } from 'vue'
+import { computed, ref, shallowRef, triggerRef } from 'vue'
 
 import { type CheckpointTuple, IndexedDBSaver } from '@/api/checkpoints'
 
 export const useSessionStore = defineStore('session', () => {
   const threadId = ref(localStorage.getItem('threadId') || uuidv4())
   const mode = ref<'ask' | 'agent'>((localStorage.getItem('chatMode') as 'ask' | 'agent') || 'ask')
-  const history = ref<Message[]>([])
+  const history = shallowRef<Message[]>([])
   const loading = ref(false)
   const abortController = ref<AbortController | null>(null)
   const currentCheckpointId = ref('')
   const errorIssue = ref<boolean | string | null>(false)
+  const initError = ref<Error | null>(null)
 
   const saver = new IndexedDBSaver()
 
@@ -56,17 +57,20 @@ export const useSessionStore = defineStore('session', () => {
 
   function pushMessage(msg: Message) {
     history.value.push(msg)
+    triggerRef(history)
   }
 
   function updateLastMessage(msg: Message) {
     const lastIndex = history.value.length - 1
     if (lastIndex >= 0) {
       history.value[lastIndex] = msg
+      triggerRef(history)
     }
   }
 
   function popLastMessage() {
     history.value.pop()
+    triggerRef(history)
   }
 
   function getLastMessageText(): string {
@@ -150,8 +154,10 @@ export const useSessionStore = defineStore('session', () => {
     if (threadId.value) {
       try {
         await loadThreadHistory(threadId.value)
+        initError.value = null
       } catch (e) {
-        console.error('Auto reload history failed:', e)
+        initError.value = e instanceof Error ? e : new Error(String(e))
+        console.error('[sessionStore] Auto reload history failed:', e)
       }
     }
   }
@@ -164,6 +170,7 @@ export const useSessionStore = defineStore('session', () => {
     abortController,
     currentCheckpointId,
     errorIssue,
+    initError,
     saver,
     displayHistory,
     setMode,

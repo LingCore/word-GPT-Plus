@@ -20,7 +20,8 @@ export const usePromptStore = defineStore('prompts', () => {
     if (stored) {
       try {
         savedPrompts.value = JSON.parse(stored)
-      } catch {
+      } catch (e) {
+        console.warn('[promptStore] Failed to parse stored prompts, resetting:', e)
         savedPrompts.value = []
       }
     }

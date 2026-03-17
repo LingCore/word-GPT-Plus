@@ -17,7 +17,7 @@ const fetchWebContentTool = new DynamicStructuredTool({
   schema: z.object({
     url: z.string().describe('The URL to fetch content from'),
   }),
-  func: async ({ url }) => {
+  func: async ({ url }: { url: string }) => {
     try {
       const response = await fetch(url, {
         headers: {
@@ -42,8 +42,8 @@ const fetchWebContentTool = new DynamicStructuredTool({
       const content = textContent.length > maxLength ? textContent.substring(0, maxLength) + '...' : textContent
 
       return `Content from ${url}:\n\n${content}`
-    } catch (error: any) {
-      return `Error fetching content: ${error.message}`
+    } catch (error: unknown) {
+      return `Error fetching content: ${error instanceof Error ? error.message : String(error)}`
     }
   },
 })
@@ -56,7 +56,7 @@ const searchWebTool = new DynamicStructuredTool({
     query: z.string().describe('The search query'),
     maxResults: z.number().optional().default(10).describe('Maximum number of results to return (default: 10)'),
   }),
-  func: async ({ query, maxResults = 10 }) => {
+  func: async ({ query, maxResults = 10 }: { query: string; maxResults?: number }) => {
     try {
       const url = `https://ddgs.horosama.com/search/text?query=${encodeURIComponent(query)}&max_results=${maxResults <= 10 ? maxResults : 10}`
       const response = await fetch(url)
@@ -64,13 +64,17 @@ const searchWebTool = new DynamicStructuredTool({
         return `Search failed: ${response.status}`
       }
       const data = await response.json()
+      if (!data.results || !Array.isArray(data.results)) {
+        return 'Search returned no results or unexpected format.'
+      }
       let results = ''
-      data.results.forEach((result: any, index: number) => {
+      const items = data.results as { title: string; href: string; body: string }[]
+      items.forEach((result, index: number) => {
         results += `Result ${index + 1}:\nTitle: ${result.title}\nLink: ${result.href}\nSnippet: ${result.body}\n\n`
       })
       return results
-    } catch (error: any) {
-      return `Error searching: ${error.message}`
+    } catch (error: unknown) {
+      return `Error searching: ${error instanceof Error ? error.message : String(error)}`
     }
   },
 })
@@ -86,7 +90,7 @@ const getCurrentDateTool = new DynamicStructuredTool({
       .default('full')
       .describe('Format: "full" (date and time), "date" (date only), "time" (time only), "iso" (ISO 8601)'),
   }),
-  func: async ({ format = 'full' }) => {
+  func: async ({ format = 'full' }: { format?: string }) => {
     const now = new Date()
 
     switch (format) {
@@ -125,7 +129,7 @@ const calculateMathTool = new DynamicStructuredTool({
   schema: z.object({
     expression: z.string().describe('The mathematical expression to evaluate (e.g., "2 + 2 * 3")'),
   }),
-  func: async ({ expression }) => {
+  func: async ({ expression }: { expression: string }) => {
     try {
       const result = evaluate(expression)
 
@@ -134,8 +138,8 @@ const calculateMathTool = new DynamicStructuredTool({
       }
 
       return `${expression} = ${result}`
-    } catch (error: any) {
-      return `Error evaluating expression: ${error.message}`
+    } catch (error: unknown) {
+      return `Error evaluating expression: ${error instanceof Error ? error.message : String(error)}`
     }
   },
 })

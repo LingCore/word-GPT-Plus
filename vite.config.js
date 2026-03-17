@@ -21,6 +21,10 @@ export default defineConfig({
       output: {
         manualChunks: {
           langchain: ['langchain', '@langchain/core', '@langchain/langgraph'],
+          'langchain-openai': ['@langchain/openai'],
+          'langchain-google': ['@langchain/google-genai'],
+          'langchain-ollama': ['@langchain/ollama'],
+          'langchain-groq': ['@langchain/groq'],
           vendor: ['vue', 'vue-router', 'pinia', 'vue-i18n'],
         },
       },

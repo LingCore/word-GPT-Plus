@@ -21,8 +21,8 @@ interface CheckpointRow {
   thread_id: string
   checkpoint_id: string
   parent_checkpoint_id?: string
-  checkpoint: any
-  metadata: any
+  checkpoint: Checkpoint
+  metadata: CheckpointMetadata
 }
 
 export interface CheckpointListOptions {
@@ -83,9 +83,8 @@ export class IndexedDBSaver extends BaseCheckpointSaver {
         return undefined
       }
 
-      //直接使用对象，不需要序列化
-      const checkpoint = row.checkpoint as Checkpoint
-      const metadata = row.metadata as CheckpointMetadata
+      const checkpoint = row.checkpoint
+      const metadata = row.metadata
 
       return {
         config: { configurable: { thread_id, checkpoint_id: row.checkpoint_id } },
@@ -122,8 +121,8 @@ export class IndexedDBSaver extends BaseCheckpointSaver {
     const rows = await query.toArray()
 
     for (const row of rows) {
-      const checkpoint = row.checkpoint as Checkpoint
-      const metadata = row.metadata as CheckpointMetadata
+      const checkpoint = row.checkpoint
+      const metadata = row.metadata
       yield {
         config: { configurable: { thread_id: row.thread_id, checkpoint_id: row.checkpoint_id } },
         checkpoint,
